@@ -11,7 +11,7 @@ CREATE TABLE cards (
     project_id INTEGER NOT NULL REFERENCES projects(id),
     title TEXT NOT NULL,
     description TEXT,
-    status TEXT NOT NULL DEFAULT 'backlog' CHECK(status IN ('backlog', 'in_progress', 'review', 'blocked', 'done')),
+    status TEXT NOT NULL DEFAULT 'backlog' CHECK(status IN ('backlog', 'in_progress', 'review', 'blocked', 'done', 'wont_do', 'invalid')),
     priority INTEGER NOT NULL DEFAULT 50 CHECK(priority >= 0 AND priority <= 100),
     created_by INTEGER NOT NULL REFERENCES users(id),
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -24,7 +24,7 @@ CREATE TABLE comments (
     message TEXT NOT NULL,
     created_by INTEGER NOT NULL REFERENCES users(id),
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    deleted_at TEXT
+    status TEXT NOT NULL DEFAULT 'created' CHECK(status IN ('created', 'deleted'))
 );
 
 CREATE TABLE cards_audit (

@@ -1,5 +1,17 @@
 import { Hono } from "hono";
 import { serveStatic } from "hono/bun";
+import { createDatabase } from "./db";
+
+// Parse --db argument
+const dbIndex = Bun.argv.indexOf("--db");
+if (dbIndex === -1 || !Bun.argv[dbIndex + 1]) {
+  console.error("Error: --db <path> argument required");
+  process.exit(1);
+}
+const dbPath = Bun.argv[dbIndex + 1];
+
+// Initialize database
+const db = createDatabase(dbPath);
 
 const app = new Hono();
 
