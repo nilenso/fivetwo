@@ -19,3 +19,9 @@ bun start
 ```
 
 This project was created using `bun init` in bun v1.3.3. [Bun](https://bun.com) is a fast all-in-one JavaScript runtime.
+
+## Database Migrations
+
+```bash
+nix run github:neenaoffline/litem8 -- up --db data.db --migrations ./migrations
+```
