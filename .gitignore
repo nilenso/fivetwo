@@ -23,6 +23,8 @@ test-tmp/
 
 # databases
 *.db
+*.db-shm
+*.db-wal
 
 # dotenv environment variable files
 .env
@@ -41,3 +43,9 @@ test-tmp/
 
 # Finder (MacOS) folder config
 .DS_Store
+
+# Tokens?
+*.token
+
+# Opencode?
+.opencode
