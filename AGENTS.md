@@ -1,5 +1,6 @@
-
 Default to using Bun instead of Node.js.
+
+> **Note**: When changing startup behavior (CLI arguments, environment variables) or install steps, update README.md accordingly.
 
 - Use `bun <file>` instead of `node <file>` or `ts-node <file>`
 - Use `bun test` instead of `jest` or `vitest`
