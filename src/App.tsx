@@ -55,6 +55,107 @@ function clearToken() {
   document.cookie = "token=; path=/; max-age=0";
 }
 
+function NewProjectForm({
+  token,
+  onSuccess,
+  onCancel,
+}: {
+  token: string;
+  onSuccess: (project: Project) => void;
+  onCancel: () => void;
+}) {
+  const [host, setHost] = useState("github.com");
+  const [owner, setOwner] = useState("");
+  const [repository, setRepository] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmitting(true);
+    setError(null);
+
+    try {
+      const res = await fetch("/api/v1/projects", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ host, owner, repository }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to create project");
+      }
+
+      const project = await res.json();
+      onSuccess(project);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Unknown error");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <dialog open>
+      <article>
+        <header>
+          <button
+            aria-label="Close"
+            rel="prev"
+            onClick={onCancel}
+            disabled={submitting}
+          />
+          <h2>Add Project</h2>
+        </header>
+        <form onSubmit={handleSubmit}>
+          <label>
+            Host
+            <input
+              type="text"
+              value={host}
+              onChange={(e) => setHost(e.target.value)}
+              placeholder="github.com"
+              required
+              disabled={submitting}
+            />
+          </label>
+          <label>
+            Owner
+            <input
+              type="text"
+              value={owner}
+              onChange={(e) => setOwner(e.target.value)}
+              placeholder="username or organization"
+              required
+              autoFocus
+              disabled={submitting}
+            />
+          </label>
+          <label>
+            Repository
+            <input
+              type="text"
+              value={repository}
+              onChange={(e) => setRepository(e.target.value)}
+              placeholder="repository-name"
+              required
+              disabled={submitting}
+            />
+          </label>
+          {error && <p style={{ color: "var(--pico-del-color)" }}>{error}</p>}
+          <button type="submit" disabled={submitting} aria-busy={submitting}>
+            {submitting ? "Creating..." : "Create Project"}
+          </button>
+        </form>
+      </article>
+    </dialog>
+  );
+}
+
 function CardRow({ card, token }: { card: Card; token: string }) {
   const [expanded, setExpanded] = useState(false);
   const [comments, setComments] = useState<Comment[]>([]);
@@ -137,6 +238,7 @@ export function App() {
   const [cards, setCards] = useState<Card[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showNewProjectForm, setShowNewProjectForm] = useState(false);
 
   const fetchData = async (authToken: string) => {
     setLoading(true);
@@ -243,12 +345,30 @@ export function App() {
     return acc;
   }, {} as Record<number, Card[]>);
 
+  const handleProjectCreated = (project: Project) => {
+    setProjects((prev) => [project, ...prev]);
+    setShowNewProjectForm(false);
+  };
+
   return (
     <main className="container">
       <header>
         <h1>FiveTwo</h1>
-        <button onClick={handleLogout} className="outline">Logout</button>
+        <div>
+          <button onClick={() => setShowNewProjectForm(true)} style={{ marginRight: "0.5rem" }}>
+            Add Project
+          </button>
+          <button onClick={handleLogout} className="outline">Logout</button>
+        </div>
       </header>
+
+      {showNewProjectForm && (
+        <NewProjectForm
+          token={token}
+          onSuccess={handleProjectCreated}
+          onCancel={() => setShowNewProjectForm(false)}
+        />
+      )}
 
       {projects.length === 0 ? (
         <p>No projects yet.</p>

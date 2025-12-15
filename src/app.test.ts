@@ -222,6 +222,99 @@ describe("/api/v1/status", () => {
   });
 });
 
+describe("POST /api/v1/projects", () => {
+  let db: Database;
+  let app: ReturnType<typeof createApp>;
+  let token: string;
+
+  beforeAll(async () => {
+    db = createTestDb();
+    app = createApp({ db, jwtSecret: JWT_SECRET });
+    db.run("INSERT INTO users (id, username, type) VALUES (?, ?, ?)", [1, "testuser", "human"]);
+    token = await generateJwt(JWT_SECRET, 1);
+  });
+
+  afterAll(() => {
+    db.close();
+  });
+
+  test("creates a project with valid fields", async () => {
+    const res = await app.request("/api/v1/projects", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        host: "github.com",
+        owner: "testowner",
+        repository: "testrepo",
+      }),
+    });
+
+    expect(res.status).toBe(201);
+    const project = await res.json();
+    expect(project.id).toBeDefined();
+    expect(project.host).toBe("github.com");
+    expect(project.owner).toBe("testowner");
+    expect(project.repository).toBe("testrepo");
+    expect(project.created_at).toBeDefined();
+  });
+
+  test("returns 400 for missing required fields", async () => {
+    const res = await app.request("/api/v1/projects", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        host: "github.com",
+        owner: "testowner",
+        // missing repository
+      }),
+    });
+
+    expect(res.status).toBe(400);
+    const data = await res.json();
+    expect(data.error).toContain("required");
+  });
+
+  test("returns 400 for duplicate project", async () => {
+    // First create succeeds
+    await app.request("/api/v1/projects", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        host: "github.com",
+        owner: "duplicate",
+        repository: "repo",
+      }),
+    });
+
+    // Second create fails
+    const res = await app.request("/api/v1/projects", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        host: "github.com",
+        owner: "duplicate",
+        repository: "repo",
+      }),
+    });
+
+    expect(res.status).toBe(400);
+    const data = await res.json();
+    expect(data.error).toContain("already exists");
+  });
+});
+
 describe("/api/v1/cards", () => {
   let db: Database;
   let app: ReturnType<typeof createApp>;
