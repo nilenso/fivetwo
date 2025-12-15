@@ -32,6 +32,21 @@ function getToken(): string | null {
   return match ? match[1] : null;
 }
 
+function PriorityDisplay({ priority }: { priority: number }) {
+  switch (priority) {
+    case 20:
+      return <span title="Low priority">🔽</span>;
+    case 50:
+      return <span title="Medium priority">🔸</span>;
+    case 80:
+      return <span title="High priority">🔺</span>;
+    default:
+      return <span>{priority}</span>;
+  }
+}
+
+const TERMINAL_STATUSES = ["done", "wont_do", "invalid"] as const;
+
 function setToken(token: string) {
   document.cookie = `token=${token}; path=/; max-age=31536000`;
 }
@@ -71,7 +86,7 @@ function CardRow({ card, token }: { card: Card; token: string }) {
         <td>{card.id}</td>
         <td>{card.title}</td>
         <td>{card.status}</td>
-        <td>{card.priority}</td>
+        <td><PriorityDisplay priority={card.priority} /></td>
       </tr>
       {expanded && (
         <tr>
@@ -240,13 +255,19 @@ export function App() {
       ) : (
         projects.map((project) => {
           const projectCards = cardsByProject[project.id] || [];
+          const activeCards = projectCards.filter(
+            (c) => !TERMINAL_STATUSES.includes(c.status as typeof TERMINAL_STATUSES[number])
+          );
+          const terminatedCards = projectCards.filter(
+            (c) => TERMINAL_STATUSES.includes(c.status as typeof TERMINAL_STATUSES[number])
+          );
           return (
             <section key={project.id}>
               <h2>
                 {project.host}/{project.owner}/{project.repository}
               </h2>
-              {projectCards.length === 0 ? (
-                <p>No cards in this project.</p>
+              {activeCards.length === 0 ? (
+                <p>No active cards in this project.</p>
               ) : (
                 <table>
                   <thead>
@@ -258,11 +279,33 @@ export function App() {
                     </tr>
                   </thead>
                   <tbody>
-                    {projectCards.map((c) => (
+                    {activeCards.map((c) => (
                       <CardRow key={c.id} card={c} token={token} />
                     ))}
                   </tbody>
                 </table>
+              )}
+              {terminatedCards.length > 0 && (
+                <details>
+                  <summary>
+                    Completed ({terminatedCards.length} card{terminatedCards.length !== 1 ? "s" : ""})
+                  </summary>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>ID</th>
+                        <th>Title</th>
+                        <th>Status</th>
+                        <th>Priority</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {terminatedCards.map((c) => (
+                        <CardRow key={c.id} card={c} token={token} />
+                      ))}
+                    </tbody>
+                  </table>
+                </details>
               )}
             </section>
           );
