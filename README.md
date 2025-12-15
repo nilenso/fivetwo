@@ -9,13 +9,13 @@ bun install
 To start a development server:
 
 ```bash
-bun dev
+bun dev --db data.db
 ```
 
 To run for production:
 
 ```bash
-bun start
+bun start --db data.db
 ```
 
 This project was created using `bun init` in bun v1.3.3. [Bun](https://bun.com) is a fast all-in-one JavaScript runtime.
