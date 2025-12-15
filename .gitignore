@@ -21,6 +21,9 @@ fivetwo.config.json
 # test artifacts
 test-tmp/
 
+# databases
+*.db
+
 # dotenv environment variable files
 .env
 .env.development.local
