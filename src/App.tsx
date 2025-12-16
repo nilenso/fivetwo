@@ -168,7 +168,9 @@ function CardTile({ card, onClick }: { card: Card; onClick: () => void }) {
         <p className="card-tile-description">{card.description}</p>
       )}
       <div className="card-tile-meta">
-        <span className="card-tile-status">{card.status}</span>
+        <span className="card-tile-status" data-status={card.status}>
+          {card.status.replace("_", " ")}
+        </span>
         <PriorityDisplay priority={card.priority} />
       </div>
     </div>
