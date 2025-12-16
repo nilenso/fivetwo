@@ -384,7 +384,19 @@ export function App() {
           return (
             <section key={project.id}>
               <h2>
-                {project.host}/{project.owner}/{project.repository}
+                <img
+                  src={`https://${project.host}/favicon.ico`}
+                  alt=""
+                  style={{ width: 20, height: 20, marginRight: 8, verticalAlign: "middle" }}
+                  onError={(e) => { e.currentTarget.style.display = "none"; }}
+                />
+                <a
+                  href={`https://${project.host}/${project.owner}/${project.repository}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  {project.owner}/{project.repository}
+                </a>
               </h2>
               {activeCards.length === 0 ? (
                 <p>No active cards in this project.</p>
