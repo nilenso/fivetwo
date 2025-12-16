@@ -156,77 +156,95 @@ function NewProjectForm({
   );
 }
 
-function CardRow({ card, token }: { card: Card; token: string }) {
-  const [expanded, setExpanded] = useState(false);
+function CardTile({ card, onClick }: { card: Card; onClick: () => void }) {
+  return (
+    <div className="card-tile" onClick={onClick}>
+      <div className="card-tile-header">
+        <h3 className="card-tile-title">{card.title}</h3>
+        <span className="card-tile-id">#{card.id}</span>
+      </div>
+      {card.description && (
+        <p className="card-tile-description">{card.description}</p>
+      )}
+      <div className="card-tile-meta">
+        <span className="card-tile-status">{card.status}</span>
+        <PriorityDisplay priority={card.priority} />
+      </div>
+    </div>
+  );
+}
+
+function SidePanel({
+  card,
+  token,
+  onClose,
+}: {
+  card: Card | null;
+  token: string;
+  onClose: () => void;
+}) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [loadingComments, setLoadingComments] = useState(false);
 
-  const toggleComments = async () => {
-    if (expanded) {
-      setExpanded(false);
-      return;
-    }
+  useEffect(() => {
+    if (!card) return;
 
-    setExpanded(true);
     setLoadingComments(true);
-    try {
-      const res = await fetch(`/api/v1/cards/${card.id}/comments`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
-        setComments(await res.json());
-      }
-    } finally {
-      setLoadingComments(false);
-    }
-  };
+    fetch(`/api/v1/cards/${card.id}/comments`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((res) => (res.ok ? res.json() : []))
+      .then(setComments)
+      .finally(() => setLoadingComments(false));
+  }, [card, token]);
 
   return (
     <>
-      <tr onClick={toggleComments} style={{ cursor: "pointer" }}>
-        <td>{card.id}</td>
-        <td>{card.title}</td>
-        <td>{card.status}</td>
-        <td><PriorityDisplay priority={card.priority} /></td>
-      </tr>
-      {expanded && (
-        <tr>
-          <td colSpan={4} style={{ background: "var(--card-background-color)" }}>
+      <div
+        className={`side-panel-backdrop ${card ? "open" : ""}`}
+        onClick={onClose}
+      />
+      <div className={`side-panel ${card ? "open" : ""}`}>
+        {card && (
+          <>
+            <div className="side-panel-header">
+              <h2 className="side-panel-title">{card.title}</h2>
+              <button className="side-panel-close" onClick={onClose}>
+                ×
+              </button>
+            </div>
+            <div className="side-panel-meta">
+              <span>#{card.id}</span>
+              <span>{card.status}</span>
+              <span><PriorityDisplay priority={card.priority} /></span>
+              <span>{new Date(card.created_at).toLocaleDateString()}</span>
+            </div>
             {card.description && (
-              <div style={{ marginBottom: "1rem" }}>
-                <strong>Description</strong>
+              <div className="side-panel-section">
+                <h4>Description</h4>
                 <Markdown>{card.description}</Markdown>
               </div>
             )}
-            {loadingComments ? (
-              <p aria-busy="true">Loading comments...</p>
-            ) : comments.length === 0 ? (
-              <p><em>No comments</em></p>
-            ) : (
-              <table>
-                <thead>
-                  <tr>
-                    <th>Date</th>
-                    <th>Comment</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {comments.map((c) => (
-                    <tr key={c.id}>
-                      <td style={{ whiteSpace: "nowrap", verticalAlign: "top" }}>
-                        {new Date(c.created_at).toLocaleString()}
-                      </td>
-                      <td>
-                        <Markdown>{c.message}</Markdown>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </td>
-        </tr>
-      )}
+            <div className="side-panel-section">
+              <h4>Comments</h4>
+              {loadingComments ? (
+                <p aria-busy="true">Loading comments...</p>
+              ) : comments.length === 0 ? (
+                <p><em>No comments</em></p>
+              ) : (
+                comments.map((c) => (
+                  <div key={c.id} style={{ marginBottom: "1rem" }}>
+                    <small style={{ color: "var(--muted-color)" }}>
+                      {new Date(c.created_at).toLocaleString()}
+                    </small>
+                    <Markdown>{c.message}</Markdown>
+                  </div>
+                ))
+              )}
+            </div>
+          </>
+        )}
+      </div>
     </>
   );
 }
@@ -239,6 +257,7 @@ export function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showNewProjectForm, setShowNewProjectForm] = useState(false);
+  const [selectedCard, setSelectedCard] = useState<Card | null>(null);
 
   const fetchData = async (authToken: string) => {
     setLoading(true);
@@ -401,48 +420,34 @@ export function App() {
               {activeCards.length === 0 ? (
                 <p>No active cards in this project.</p>
               ) : (
-                <table>
-                  <thead>
-                    <tr>
-                      <th>ID</th>
-                      <th>Title</th>
-                      <th>Status</th>
-                      <th>Priority</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {activeCards.map((c) => (
-                      <CardRow key={c.id} card={c} token={token} />
-                    ))}
-                  </tbody>
-                </table>
+                <div className="card-grid">
+                  {activeCards.map((c) => (
+                    <CardTile key={c.id} card={c} onClick={() => setSelectedCard(c)} />
+                  ))}
+                </div>
               )}
               {terminatedCards.length > 0 && (
                 <details>
                   <summary>
                     Completed ({terminatedCards.length} card{terminatedCards.length !== 1 ? "s" : ""})
                   </summary>
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>ID</th>
-                        <th>Title</th>
-                        <th>Status</th>
-                        <th>Priority</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {terminatedCards.map((c) => (
-                        <CardRow key={c.id} card={c} token={token} />
-                      ))}
-                    </tbody>
-                  </table>
+                  <div className="card-grid">
+                    {terminatedCards.map((c) => (
+                      <CardTile key={c.id} card={c} onClick={() => setSelectedCard(c)} />
+                    ))}
+                  </div>
                 </details>
               )}
             </section>
           );
         })
       )}
+
+      <SidePanel
+        card={selectedCard}
+        token={token}
+        onClose={() => setSelectedCard(null)}
+      />
     </main>
   );
 }
