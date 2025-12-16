@@ -17,6 +17,7 @@ interface Card {
   status: string;
   priority: number;
   created_at: string;
+  version: number;
 }
 
 interface Comment {
@@ -252,7 +253,7 @@ function SidePanel({
               </button>
             </div>
             <div className="side-panel-meta">
-              <span>#{card.id}</span>
+              <span>#{card.id} • v{card.version}</span>
               <span>{card.status}</span>
               <span><PriorityDisplay priority={card.priority} /></span>
               <span>{new Date(card.created_at).toLocaleDateString()}</span>

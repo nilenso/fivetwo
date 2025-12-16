@@ -18,6 +18,7 @@ interface Card {
   created_by: number;
   created_at: string;
   updated_at: string;
+  version: number;
 }
 
 interface Comment {
@@ -287,7 +288,16 @@ export function createApp({ db, jwtSecret }: AppDependencies): Hono {
       description?: string;
       status?: string;
       priority?: number;
+      version?: number;
     }>();
+
+    // Optimistic locking: check version if provided
+    if (body.version !== undefined && body.version !== existingCard.version) {
+      return c.json({ 
+        error: "Version conflict", 
+        current_version: existingCard.version 
+      }, 409);
+    }
 
     // Validate status if provided
     const validStatuses = [

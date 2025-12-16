@@ -41,7 +41,8 @@ function createTestDb(): Database {
       priority INTEGER NOT NULL DEFAULT 50 CHECK(priority >= 0 AND priority <= 100),
       created_by INTEGER NOT NULL REFERENCES users(id),
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      version INTEGER NOT NULL DEFAULT 1
     )
   `);
 
@@ -117,6 +118,52 @@ function createTestDb(): Database {
       UNIQUE(source_card_id, target_card_id, reference_type),
       CHECK(source_card_id != target_card_id)
     )
+  `);
+
+  // Version triggers
+  db.run(`
+    CREATE TRIGGER increment_card_version_on_update
+    AFTER UPDATE ON cards
+    WHEN OLD.title != NEW.title 
+      OR OLD.description IS NOT NEW.description 
+      OR OLD.status != NEW.status 
+      OR OLD.priority != NEW.priority
+    BEGIN
+      UPDATE cards SET version = version + 1 WHERE id = NEW.id;
+    END
+  `);
+
+  db.run(`
+    CREATE TRIGGER increment_card_version_on_comment_add
+    AFTER INSERT ON comments
+    BEGIN
+      UPDATE cards SET version = version + 1 WHERE id = NEW.card_id;
+    END
+  `);
+
+  db.run(`
+    CREATE TRIGGER increment_card_version_on_comment_delete
+    AFTER UPDATE ON comments
+    WHEN OLD.status != 'deleted' AND NEW.status = 'deleted'
+    BEGIN
+      UPDATE cards SET version = version + 1 WHERE id = NEW.card_id;
+    END
+  `);
+
+  db.run(`
+    CREATE TRIGGER increment_card_version_on_reference_add
+    AFTER INSERT ON card_references
+    BEGIN
+      UPDATE cards SET version = version + 1 WHERE id = NEW.source_card_id;
+    END
+  `);
+
+  db.run(`
+    CREATE TRIGGER increment_card_version_on_reference_delete
+    AFTER DELETE ON card_references
+    BEGIN
+      UPDATE cards SET version = version + 1 WHERE id = OLD.source_card_id;
+    END
   `);
 
   return db;
@@ -642,6 +689,68 @@ describe("/api/v1/cards", () => {
       });
 
       expect(res.status).toBe(400);
+    });
+
+    test("returns version in card response", async () => {
+      const res = await app.request(`/api/v1/cards/${cardId}`, {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ title: "Version Test" }),
+      });
+
+      expect(res.status).toBe(200);
+      const card = await res.json();
+      expect(card.version).toBeDefined();
+      expect(typeof card.version).toBe("number");
+    });
+
+    test("returns 409 for version conflict", async () => {
+      // Get current card to know its version
+      const getRes = await app.request(`/api/v1/cards?id=${cardId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const cards = await getRes.json();
+      const currentVersion = cards[0]?.version || 1;
+
+      // Try to update with wrong version
+      const res = await app.request(`/api/v1/cards/${cardId}`, {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ title: "Conflict Test", version: currentVersion - 100 }),
+      });
+
+      expect(res.status).toBe(409);
+      const data = await res.json();
+      expect(data.error).toContain("Version conflict");
+      expect(data.current_version).toBeDefined();
+    });
+
+    test("accepts update with correct version", async () => {
+      // Get current card version
+      const getRes = await app.request(`/api/v1/cards?id=${cardId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const cards = await getRes.json();
+      const currentVersion = cards[0]?.version;
+
+      const res = await app.request(`/api/v1/cards/${cardId}`, {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ title: "Correct Version Update", version: currentVersion }),
+      });
+
+      expect(res.status).toBe(200);
+      const card = await res.json();
+      expect(card.title).toBe("Correct Version Update");
     });
   });
 });
