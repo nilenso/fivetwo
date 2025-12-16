@@ -15,11 +15,14 @@ interface Card {
   description: string | null;
   status: string;
   priority: number;
+  type: string;
   created_by: number;
   created_at: string;
   updated_at: string;
   version: number;
 }
+
+const validCardTypes = ["story", "bug", "task", "epic", "spike", "chore"];
 
 interface Comment {
   id: number;
@@ -157,6 +160,7 @@ export function createApp({ db, jwtSecret }: AppDependencies): Hono {
     const priority = c.req.query("priority");
     const search = c.req.query("search");
     const projectId = c.req.query("project_id");
+    const type = c.req.query("type");
 
     let cards: Card[];
 
@@ -191,6 +195,10 @@ export function createApp({ db, jwtSecret }: AppDependencies): Hono {
         conditions.push("project_id = ?");
         params.push(parseInt(projectId, 10));
       }
+      if (type) {
+        conditions.push("type = ?");
+        params.push(type);
+      }
 
       const whereClause =
         conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
@@ -214,6 +222,7 @@ export function createApp({ db, jwtSecret }: AppDependencies): Hono {
       description?: string;
       status?: string;
       priority?: number;
+      type?: string;
     }>();
 
     if (!body.project_id || !body.title) {
@@ -248,10 +257,15 @@ export function createApp({ db, jwtSecret }: AppDependencies): Hono {
       return c.json({ error: "Priority must be between 0 and 100" }, 400);
     }
 
+    // Validate type if provided
+    if (body.type && !validCardTypes.includes(body.type)) {
+      return c.json({ error: `Invalid type. Must be one of: ${validCardTypes.join(", ")}` }, 400);
+    }
+
     const result = db
-      .query<{ id: number }, [number, string, string | null, string, number, number]>(
-        `INSERT INTO cards (project_id, title, description, status, priority, created_by)
-         VALUES (?, ?, ?, ?, ?, ?)
+      .query<{ id: number }, [number, string, string | null, string, number, string, number]>(
+        `INSERT INTO cards (project_id, title, description, status, priority, type, created_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?)
          RETURNING id`
       )
       .get(
@@ -260,6 +274,7 @@ export function createApp({ db, jwtSecret }: AppDependencies): Hono {
         body.description ?? null,
         body.status ?? "backlog",
         body.priority ?? 50,
+        body.type ?? "task",
         userId
       );
 
@@ -288,6 +303,7 @@ export function createApp({ db, jwtSecret }: AppDependencies): Hono {
       description?: string;
       status?: string;
       priority?: number;
+      type?: string;
       version?: number;
     }>();
 
@@ -318,6 +334,11 @@ export function createApp({ db, jwtSecret }: AppDependencies): Hono {
       return c.json({ error: "Priority must be between 0 and 100" }, 400);
     }
 
+    // Validate type if provided
+    if (body.type && !validCardTypes.includes(body.type)) {
+      return c.json({ error: `Invalid type. Must be one of: ${validCardTypes.join(", ")}` }, 400);
+    }
+
     // Build update query dynamically
     const updates: string[] = [];
     const params: (string | number)[] = [];
@@ -337,6 +358,10 @@ export function createApp({ db, jwtSecret }: AppDependencies): Hono {
     if (body.priority !== undefined) {
       updates.push("priority = ?");
       params.push(body.priority);
+    }
+    if (body.type !== undefined) {
+      updates.push("type = ?");
+      params.push(body.type);
     }
 
     if (updates.length === 0) {

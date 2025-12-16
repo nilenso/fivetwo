@@ -16,9 +16,19 @@ interface Card {
   description: string | null;
   status: string;
   priority: number;
+  type: string;
   created_at: string;
   version: number;
 }
+
+const CARD_TYPE_ICONS: Record<string, string> = {
+  bug: "🐛",
+  story: "📖",
+  task: "✅",
+  epic: "🏔️",
+  spike: "🔬",
+  chore: "🔧",
+};
 
 interface Comment {
   id: number;
@@ -158,9 +168,11 @@ function NewProjectForm({
 }
 
 function CardTile({ card, onClick }: { card: Card; onClick: () => void }) {
+  const typeIcon = CARD_TYPE_ICONS[card.type] || "✅";
   return (
     <div className="card-tile" onClick={onClick}>
       <div className="card-tile-header">
+        <span className="card-tile-type" title={card.type}>{typeIcon}</span>
         <h3 className="card-tile-title">{card.title}</h3>
         <span className="card-tile-id">#{card.id}</span>
       </div>
@@ -256,6 +268,7 @@ function SidePanel({
             </div>
             <div className="side-panel-meta">
               <span>#{card.id} • v{card.version}</span>
+              <span>{CARD_TYPE_ICONS[card.type] || "✅"} {card.type}</span>
               <span>{card.status}</span>
               <span><PriorityDisplay priority={card.priority} /></span>
               <span>{new Date(card.created_at).toLocaleDateString()}</span>

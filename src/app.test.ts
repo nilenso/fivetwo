@@ -39,6 +39,7 @@ function createTestDb(): Database {
       description TEXT,
       status TEXT NOT NULL DEFAULT 'backlog' CHECK(status IN ('backlog', 'in_progress', 'review', 'blocked', 'done', 'wont_do', 'invalid')),
       priority INTEGER NOT NULL DEFAULT 50 CHECK(priority >= 0 AND priority <= 100),
+      type TEXT NOT NULL DEFAULT 'task' CHECK(type IN ('story', 'bug', 'task', 'epic', 'spike', 'chore')),
       created_by INTEGER NOT NULL REFERENCES users(id),
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,

@@ -235,6 +235,11 @@ code {
   gap: 0.5rem;
 }
 
+.card-tile-type {
+  font-size: 1.1rem;
+  flex-shrink: 0;
+}
+
 .card-tile-title {
   font-weight: 600;
   font-size: 1rem;
