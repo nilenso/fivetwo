@@ -35,11 +35,11 @@ function getToken(): string | null {
 function PriorityDisplay({ priority }: { priority: number }) {
   switch (priority) {
     case 20:
-      return <span title="Low priority">🔽</span>;
+      return <span title="Low priority">▰▱▱</span>;
     case 50:
-      return <span title="Medium priority">🔸</span>;
+      return <span title="Medium priority">▰▰▱</span>;
     case 80:
-      return <span title="High priority">🔺</span>;
+      return <span title="High priority">▰▰▰</span>;
     default:
       return <span>{priority}</span>;
   }
