@@ -174,6 +174,30 @@ function CardTile({ card, onClick }: { card: Card; onClick: () => void }) {
   );
 }
 
+interface CardReference {
+  id: number;
+  source_card_id: number;
+  target_card_id: number;
+  reference_type: string;
+  created_at: string;
+  target_title?: string;
+  source_title?: string;
+}
+
+const REFERENCE_TYPE_LABELS: Record<string, string> = {
+  blocks: "Blocks",
+  blocked_by: "Blocked by",
+  relates_to: "Relates to",
+  duplicates: "Duplicates",
+  duplicated_by: "Duplicated by",
+  parent_of: "Parent of",
+  child_of: "Child of",
+  follows: "Follows",
+  precedes: "Precedes",
+  clones: "Clones",
+  cloned_by: "Cloned by",
+};
+
 function SidePanel({
   card,
   token,
@@ -185,17 +209,31 @@ function SidePanel({
 }) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [loadingComments, setLoadingComments] = useState(false);
+  const [references, setReferences] = useState<{
+    outgoing: CardReference[];
+    incoming: CardReference[];
+  }>({ outgoing: [], incoming: [] });
+  const [loadingRefs, setLoadingRefs] = useState(false);
 
   useEffect(() => {
     if (!card) return;
 
     setLoadingComments(true);
+    setLoadingRefs(true);
+
     fetch(`/api/v1/cards/${card.id}/comments`, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((res) => (res.ok ? res.json() : []))
       .then(setComments)
       .finally(() => setLoadingComments(false));
+
+    fetch(`/api/v1/cards/${card.id}/references`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((res) => (res.ok ? res.json() : { outgoing: [], incoming: [] }))
+      .then(setReferences)
+      .finally(() => setLoadingRefs(false));
   }, [card, token]);
 
   return (
@@ -223,6 +261,38 @@ function SidePanel({
               <div className="side-panel-section">
                 <h4>Description</h4>
                 <Markdown>{card.description}</Markdown>
+              </div>
+            )}
+            {(references.outgoing.length > 0 || references.incoming.length > 0 || loadingRefs) && (
+              <div className="side-panel-section">
+                <h4>References</h4>
+                {loadingRefs ? (
+                  <p aria-busy="true">Loading references...</p>
+                ) : (
+                  <>
+                    {references.outgoing.length > 0 && (
+                      <div style={{ marginBottom: "0.75rem" }}>
+                        {references.outgoing.map((ref) => (
+                          <div key={ref.id} className="reference-item">
+                            <span className="reference-type">{REFERENCE_TYPE_LABELS[ref.reference_type] || ref.reference_type}</span>
+                            <span className="reference-card">#{ref.target_card_id} {ref.target_title}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {references.incoming.length > 0 && (
+                      <div>
+                        <small style={{ color: "var(--muted-color)" }}>Referenced by:</small>
+                        {references.incoming.map((ref) => (
+                          <div key={ref.id} className="reference-item">
+                            <span className="reference-type">{REFERENCE_TYPE_LABELS[ref.reference_type] || ref.reference_type}</span>
+                            <span className="reference-card">#{ref.source_card_id} {ref.source_title}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
             )}
             <div className="side-panel-section">

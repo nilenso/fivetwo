@@ -442,6 +442,147 @@ export function createApp({ db, jwtSecret }: AppDependencies): Hono {
     return c.json({ success: true });
   });
 
+  // Reference types
+  const validReferenceTypes = [
+    "blocks",
+    "blocked_by",
+    "relates_to",
+    "duplicates",
+    "duplicated_by",
+    "parent_of",
+    "child_of",
+    "follows",
+    "precedes",
+    "clones",
+    "cloned_by",
+  ];
+
+  interface CardReference {
+    id: number;
+    source_card_id: number;
+    target_card_id: number;
+    reference_type: string;
+    created_at: string;
+  }
+
+  // GET /cards/:id/references - List references for a card
+  v1.get("/cards/:id/references", (c) => {
+    const cardId = parseInt(c.req.param("id"), 10);
+
+    const card = db
+      .query<{ id: number }, [number]>("SELECT id FROM cards WHERE id = ?")
+      .get(cardId);
+
+    if (!card) {
+      return c.json({ error: "Card not found" }, 404);
+    }
+
+    // Get references where this card is the source
+    const outgoing = db
+      .query<CardReference & { target_title: string }, [number]>(
+        `SELECT cr.*, c.title as target_title 
+         FROM card_references cr 
+         JOIN cards c ON cr.target_card_id = c.id 
+         WHERE cr.source_card_id = ? 
+         ORDER BY cr.created_at DESC`
+      )
+      .all(cardId);
+
+    // Get references where this card is the target
+    const incoming = db
+      .query<CardReference & { source_title: string }, [number]>(
+        `SELECT cr.*, c.title as source_title 
+         FROM card_references cr 
+         JOIN cards c ON cr.source_card_id = c.id 
+         WHERE cr.target_card_id = ? 
+         ORDER BY cr.created_at DESC`
+      )
+      .all(cardId);
+
+    return c.json({ outgoing, incoming });
+  });
+
+  // POST /cards/:id/references - Add a reference
+  v1.post("/cards/:id/references", async (c) => {
+    const sourceCardId = parseInt(c.req.param("id"), 10);
+
+    const sourceCard = db
+      .query<{ id: number }, [number]>("SELECT id FROM cards WHERE id = ?")
+      .get(sourceCardId);
+
+    if (!sourceCard) {
+      return c.json({ error: "Source card not found" }, 404);
+    }
+
+    const body = await c.req.json<{
+      target_card_id: number;
+      reference_type: string;
+    }>();
+
+    if (!body.target_card_id || !body.reference_type) {
+      return c.json({ error: "target_card_id and reference_type are required" }, 400);
+    }
+
+    if (!validReferenceTypes.includes(body.reference_type)) {
+      return c.json({ error: `Invalid reference_type. Must be one of: ${validReferenceTypes.join(", ")}` }, 400);
+    }
+
+    const targetCard = db
+      .query<{ id: number }, [number]>("SELECT id FROM cards WHERE id = ?")
+      .get(body.target_card_id);
+
+    if (!targetCard) {
+      return c.json({ error: "Target card not found" }, 404);
+    }
+
+    if (sourceCardId === body.target_card_id) {
+      return c.json({ error: "Cannot reference self" }, 400);
+    }
+
+    try {
+      const result = db
+        .query<{ id: number }, [number, number, string]>(
+          `INSERT INTO card_references (source_card_id, target_card_id, reference_type)
+           VALUES (?, ?, ?)
+           RETURNING id`
+        )
+        .get(sourceCardId, body.target_card_id, body.reference_type);
+
+      const reference = db
+        .query<CardReference, [number]>("SELECT * FROM card_references WHERE id = ?")
+        .get(result!.id);
+
+      return c.json(reference, 201);
+    } catch (e: unknown) {
+      if (e instanceof Error && e.message.includes("UNIQUE constraint failed")) {
+        return c.json({ error: "Reference already exists" }, 400);
+      }
+      throw e;
+    }
+  });
+
+  // DELETE /cards/:id/references/:refId - Remove a reference
+  v1.delete("/cards/:id/references/:refId", (c) => {
+    const cardId = parseInt(c.req.param("id"), 10);
+    const refId = parseInt(c.req.param("refId"), 10);
+
+    const reference = db
+      .query<CardReference, [number]>("SELECT * FROM card_references WHERE id = ?")
+      .get(refId);
+
+    if (!reference) {
+      return c.json({ error: "Reference not found" }, 404);
+    }
+
+    if (reference.source_card_id !== cardId) {
+      return c.json({ error: "Reference does not belong to this card" }, 400);
+    }
+
+    db.run("DELETE FROM card_references WHERE id = ?", [refId]);
+
+    return c.json({ success: true });
+  });
+
   app.route("/api/v1", v1);
 
   // Serve built static files from dist/

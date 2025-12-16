@@ -99,6 +99,26 @@ function createTestDb(): Database {
     END
   `);
 
+  // Card references table
+  db.run(`
+    CREATE TABLE card_references (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      source_card_id INTEGER NOT NULL REFERENCES cards(id),
+      target_card_id INTEGER NOT NULL REFERENCES cards(id),
+      reference_type TEXT NOT NULL CHECK(reference_type IN (
+        'blocks', 'blocked_by',
+        'relates_to',
+        'duplicates', 'duplicated_by',
+        'parent_of', 'child_of',
+        'follows', 'precedes',
+        'clones', 'cloned_by'
+      )),
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(source_card_id, target_card_id, reference_type),
+      CHECK(source_card_id != target_card_id)
+    )
+  `);
+
   return db;
 }
 
@@ -763,6 +783,158 @@ describe("/api/v1/comments/:id", () => {
 
   test("returns 404 for non-existent comment", async () => {
     const res = await app.request("/api/v1/comments/9999", {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    expect(res.status).toBe(404);
+  });
+});
+
+describe("/api/v1/cards/:id/references", () => {
+  let db: Database;
+  let app: ReturnType<typeof createApp>;
+  let token: string;
+  let card1Id: number;
+  let card2Id: number;
+
+  beforeAll(async () => {
+    db = createTestDb();
+    app = createApp({ db, jwtSecret: JWT_SECRET });
+
+    db.run("INSERT INTO users (id, username, type) VALUES (?, ?, ?)", [1, "testuser", "human"]);
+    db.run("INSERT INTO projects (id, host, owner, repository) VALUES (?, ?, ?, ?)", [
+      1, "github.com", "test", "repo"
+    ]);
+
+    const result1 = db
+      .query<{ id: number }, []>(
+        "INSERT INTO cards (project_id, title, created_by) VALUES (1, 'Card 1', 1) RETURNING id"
+      )
+      .get();
+    card1Id = result1!.id;
+
+    const result2 = db
+      .query<{ id: number }, []>(
+        "INSERT INTO cards (project_id, title, created_by) VALUES (1, 'Card 2', 1) RETURNING id"
+      )
+      .get();
+    card2Id = result2!.id;
+
+    token = await generateJwt(JWT_SECRET, 1);
+  });
+
+  afterAll(() => {
+    db.close();
+  });
+
+  test("creates a reference between cards", async () => {
+    const res = await app.request(`/api/v1/cards/${card1Id}/references`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        target_card_id: card2Id,
+        reference_type: "blocks",
+      }),
+    });
+
+    expect(res.status).toBe(201);
+    const ref = await res.json();
+    expect(ref.id).toBeDefined();
+    expect(ref.source_card_id).toBe(card1Id);
+    expect(ref.target_card_id).toBe(card2Id);
+    expect(ref.reference_type).toBe("blocks");
+  });
+
+  test("returns 400 for invalid reference type", async () => {
+    const res = await app.request(`/api/v1/cards/${card1Id}/references`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        target_card_id: card2Id,
+        reference_type: "invalid_type",
+      }),
+    });
+
+    expect(res.status).toBe(400);
+  });
+
+  test("returns 400 for self-reference", async () => {
+    const res = await app.request(`/api/v1/cards/${card1Id}/references`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        target_card_id: card1Id,
+        reference_type: "relates_to",
+      }),
+    });
+
+    expect(res.status).toBe(400);
+    const data = await res.json();
+    expect(data.error).toContain("self");
+  });
+
+  test("returns 400 for duplicate reference", async () => {
+    // First reference already created in earlier test
+    const res = await app.request(`/api/v1/cards/${card1Id}/references`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        target_card_id: card2Id,
+        reference_type: "blocks",
+      }),
+    });
+
+    expect(res.status).toBe(400);
+    const data = await res.json();
+    expect(data.error).toContain("already exists");
+  });
+
+  test("lists references for a card", async () => {
+    const res = await app.request(`/api/v1/cards/${card1Id}/references`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.outgoing).toBeDefined();
+    expect(data.incoming).toBeDefined();
+    expect(data.outgoing.length).toBeGreaterThanOrEqual(1);
+    expect(data.outgoing[0].target_title).toBe("Card 2");
+  });
+
+  test("deletes a reference", async () => {
+    // Get reference ID
+    const listRes = await app.request(`/api/v1/cards/${card1Id}/references`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const { outgoing } = await listRes.json();
+    const refId = outgoing[0].id;
+
+    const res = await app.request(`/api/v1/cards/${card1Id}/references/${refId}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.success).toBe(true);
+  });
+
+  test("returns 404 for non-existent reference", async () => {
+    const res = await app.request(`/api/v1/cards/${card1Id}/references/9999`, {
       method: "DELETE",
       headers: { Authorization: `Bearer ${token}` },
     });
