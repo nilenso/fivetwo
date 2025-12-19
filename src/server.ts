@@ -153,6 +153,57 @@ export function createApp({ db, jwtSecret }: AppDependencies): Hono {
     }
   });
 
+  // GET /projects/:id/references - List all card references in a project
+  v1.get("/projects/:id/references", (c) => {
+    const projectId = parseInt(c.req.param("id"), 10);
+    const refType = c.req.query("type");
+
+    const project = db
+      .query<{ id: number }, [number]>("SELECT id FROM projects WHERE id = ?")
+      .get(projectId);
+
+    if (!project) {
+      return c.json({ error: "Project not found" }, 404);
+    }
+
+    let query = `
+      SELECT 
+        cr.id,
+        cr.source_card_id,
+        cr.target_card_id,
+        cr.reference_type,
+        cr.created_at,
+        sc.title as source_title,
+        tc.title as target_title
+      FROM card_references cr
+      JOIN cards sc ON cr.source_card_id = sc.id
+      JOIN cards tc ON cr.target_card_id = tc.id
+      WHERE sc.project_id = ?
+    `;
+    const params: (number | string)[] = [projectId];
+
+    if (refType) {
+      query += " AND cr.reference_type = ?";
+      params.push(refType);
+    }
+
+    query += " ORDER BY cr.reference_type, cr.created_at DESC";
+
+    const references = db
+      .query<{
+        id: number;
+        source_card_id: number;
+        target_card_id: number;
+        reference_type: string;
+        created_at: string;
+        source_title: string;
+        target_title: string;
+      }, (number | string)[]>(query)
+      .all(...params);
+
+    return c.json(references);
+  });
+
   // GET /cards - List cards with optional filters and FTS search
   v1.get("/cards", (c) => {
     const id = c.req.query("id");
