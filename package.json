@@ -10,7 +10,8 @@
     "mkconfig": "bun src/index.ts mkconfig",
     "mkhuman": "bun src/index.ts mkhuman",
     "mkagent": "bun src/index.ts mkagent",
-    "auth": "bun src/index.ts auth"
+    "auth": "bun src/index.ts auth",
+    "setup-pi": "bun scripts/setup-pi.ts"
   },
   "dependencies": {
     "hono": "^4.11.1",
