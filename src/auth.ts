@@ -5,6 +5,7 @@ export interface JWTPayload {
   sub: number; // user ID
   iat: number; // issued at
   exp: number; // expiration
+  [key: string]: unknown; // index signature for hono/jwt compatibility
 }
 
 export function createJwtMiddleware(secret: string): MiddlewareHandler {

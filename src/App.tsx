@@ -9,6 +9,16 @@ interface Project {
   created_at: string;
 }
 
+interface CardReference {
+  id: number;
+  source_card_id: number;
+  target_card_id: number;
+  reference_type: string;
+  created_at: string;
+  target_title?: string;
+  source_title?: string;
+}
+
 interface Card {
   id: number;
   project_id: number;
@@ -19,6 +29,10 @@ interface Card {
   type: string;
   created_at: string;
   version: number;
+  references: {
+    outgoing: CardReference[];
+    incoming: CardReference[];
+  };
 }
 
 const CARD_TYPE_ICONS: Record<string, string> = {
@@ -40,7 +54,7 @@ interface Comment {
 
 function getToken(): string | null {
   const match = document.cookie.match(/(?:^|; )token=([^;]*)/);
-  return match ? match[1] : null;
+  return match?.[1] ?? null;
 }
 
 function PriorityDisplay({ priority }: { priority: number }) {
@@ -335,140 +349,6 @@ function SidePanel({
   );
 }
 
-interface ProjectReference {
-  id: number;
-  source_card_id: number;
-  target_card_id: number;
-  reference_type: string;
-  created_at: string;
-  source_title: string;
-  target_title: string;
-}
-
-function RelationshipsModal({
-  project,
-  token,
-  onClose,
-  onCardClick,
-}: {
-  project: Project;
-  token: string;
-  onClose: () => void;
-  onCardClick: (cardId: number) => void;
-}) {
-  const [references, setReferences] = useState<ProjectReference[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [filterType, setFilterType] = useState<string>("");
-
-  useEffect(() => {
-    const url = filterType
-      ? `/api/v1/projects/${project.id}/references?type=${filterType}`
-      : `/api/v1/projects/${project.id}/references`;
-    
-    fetch(url, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((res) => (res.ok ? res.json() : []))
-      .then(setReferences)
-      .finally(() => setLoading(false));
-  }, [project.id, token, filterType]);
-
-  // Group references by type
-  const groupedRefs = references.reduce((acc, ref) => {
-    if (!acc[ref.reference_type]) {
-      acc[ref.reference_type] = [];
-    }
-    acc[ref.reference_type].push(ref);
-    return acc;
-  }, {} as Record<string, ProjectReference[]>);
-
-  return (
-    <dialog open>
-      <article style={{ maxWidth: "700px", width: "90vw" }}>
-        <header>
-          <button
-            aria-label="Close"
-            rel="prev"
-            onClick={onClose}
-          />
-          <h2>Relationships: {project.owner}/{project.repository}</h2>
-        </header>
-        <div style={{ marginBottom: "1rem" }}>
-          <select
-            value={filterType}
-            onChange={(e) => setFilterType(e.target.value)}
-            style={{ width: "auto" }}
-          >
-            <option value="">All types</option>
-            <option value="blocks">Blocks</option>
-            <option value="blocked_by">Blocked by</option>
-            <option value="relates_to">Relates to</option>
-            <option value="duplicates">Duplicates</option>
-            <option value="duplicated_by">Duplicated by</option>
-            <option value="parent_of">Parent of</option>
-            <option value="child_of">Child of</option>
-            <option value="follows">Follows</option>
-            <option value="precedes">Precedes</option>
-            <option value="clones">Clones</option>
-            <option value="cloned_by">Cloned by</option>
-          </select>
-        </div>
-        {loading ? (
-          <p aria-busy="true">Loading relationships...</p>
-        ) : references.length === 0 ? (
-          <p><em>No relationships found</em></p>
-        ) : (
-          Object.entries(groupedRefs).map(([type, refs]) => (
-            <div key={type} style={{ marginBottom: "1.5rem" }}>
-              <h4 style={{ textTransform: "capitalize", marginBottom: "0.5rem" }}>
-                {REFERENCE_TYPE_LABELS[type] || type} ({refs.length})
-              </h4>
-              <table>
-                <thead>
-                  <tr>
-                    <th>Source</th>
-                    <th></th>
-                    <th>Target</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {refs.map((ref) => (
-                    <tr key={ref.id}>
-                      <td>
-                        <a
-                          href="#"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            onCardClick(ref.source_card_id);
-                          }}
-                        >
-                          #{ref.source_card_id} {ref.source_title}
-                        </a>
-                      </td>
-                      <td style={{ textAlign: "center", color: "var(--pico-muted-color)" }}>→</td>
-                      <td>
-                        <a
-                          href="#"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            onCardClick(ref.target_card_id);
-                          }}
-                        >
-                          #{ref.target_card_id} {ref.target_title}
-                        </a>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ))
-        )}
-      </article>
-    </dialog>
-  );
-}
-
 export function App() {
   const [token, setTokenState] = useState<string | null>(getToken);
   const [tokenInput, setTokenInput] = useState("");
@@ -478,7 +358,6 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [showNewProjectForm, setShowNewProjectForm] = useState(false);
   const [selectedCard, setSelectedCard] = useState<Card | null>(null);
-  const [relationshipsProject, setRelationshipsProject] = useState<Project | null>(null);
 
   const fetchData = async (authToken: string) => {
     setLoading(true);
@@ -578,10 +457,11 @@ export function App() {
 
   // Group cards by project_id
   const cardsByProject = cards.reduce((acc, card) => {
-    if (!acc[card.project_id]) {
-      acc[card.project_id] = [];
+    const projectId = card.project_id;
+    if (!acc[projectId]) {
+      acc[projectId] = [];
     }
-    acc[card.project_id].push(card);
+    acc[projectId]!.push(card);
     return acc;
   }, {} as Record<number, Card[]>);
 
@@ -623,30 +503,21 @@ export function App() {
           );
           return (
             <section key={project.id}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <h2 style={{ margin: 0 }}>
-                  <img
-                    src={`https://${project.host}/favicon.ico`}
-                    alt=""
-                    style={{ width: 20, height: 20, marginRight: 8, verticalAlign: "middle" }}
-                    onError={(e) => { e.currentTarget.style.display = "none"; }}
-                  />
-                  <a
-                    href={`https://${project.host}/${project.owner}/${project.repository}`}
-                    target="_blank"
+              <h2>
+                <img
+                  src={`https://${project.host}/favicon.ico`}
+                  alt=""
+                  style={{ width: 20, height: 20, marginRight: 8, verticalAlign: "middle" }}
+                  onError={(e) => { e.currentTarget.style.display = "none"; }}
+                />
+                <a
+                  href={`https://${project.host}/${project.owner}/${project.repository}`}
+                  target="_blank"
                   rel="noopener noreferrer"
-                  >
-                    {project.owner}/{project.repository}
-                  </a>
-                </h2>
-                <button
-                  className="outline"
-                  style={{ padding: "0.25rem 0.75rem", fontSize: "0.85rem" }}
-                  onClick={() => setRelationshipsProject(project)}
                 >
-                  Relationships
-                </button>
-              </div>
+                  {project.owner}/{project.repository}
+                </a>
+              </h2>
               {activeCards.length === 0 ? (
                 <p>No active cards in this project.</p>
               ) : (
@@ -678,21 +549,6 @@ export function App() {
         token={token}
         onClose={() => setSelectedCard(null)}
       />
-
-      {relationshipsProject && (
-        <RelationshipsModal
-          project={relationshipsProject}
-          token={token}
-          onClose={() => setRelationshipsProject(null)}
-          onCardClick={(cardId) => {
-            const card = cards.find((c) => c.id === cardId);
-            if (card) {
-              setRelationshipsProject(null);
-              setSelectedCard(card);
-            }
-          }}
-        />
-      )}
     </main>
   );
 }

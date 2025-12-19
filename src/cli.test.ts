@@ -260,7 +260,7 @@ describe("CLI: auth", () => {
     expect(parts.length).toBe(3);
 
     // Decode and verify payload
-    const payload = JSON.parse(Buffer.from(parts[1], "base64").toString());
+    const payload = JSON.parse(Buffer.from(parts[1]!, "base64").toString());
     expect(payload.sub).toBe(1); // user ID
     expect(payload.iat).toBeDefined();
     expect(payload.exp).toBeDefined();

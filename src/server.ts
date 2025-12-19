@@ -153,56 +153,20 @@ export function createApp({ db, jwtSecret }: AppDependencies): Hono {
     }
   });
 
-  // GET /projects/:id/references - List all card references in a project
-  v1.get("/projects/:id/references", (c) => {
-    const projectId = parseInt(c.req.param("id"), 10);
-    const refType = c.req.query("type");
+  interface CardReference {
+    id: number;
+    source_card_id: number;
+    target_card_id: number;
+    reference_type: string;
+    created_at: string;
+  }
 
-    const project = db
-      .query<{ id: number }, [number]>("SELECT id FROM projects WHERE id = ?")
-      .get(projectId);
-
-    if (!project) {
-      return c.json({ error: "Project not found" }, 404);
-    }
-
-    let query = `
-      SELECT 
-        cr.id,
-        cr.source_card_id,
-        cr.target_card_id,
-        cr.reference_type,
-        cr.created_at,
-        sc.title as source_title,
-        tc.title as target_title
-      FROM card_references cr
-      JOIN cards sc ON cr.source_card_id = sc.id
-      JOIN cards tc ON cr.target_card_id = tc.id
-      WHERE sc.project_id = ?
-    `;
-    const params: (number | string)[] = [projectId];
-
-    if (refType) {
-      query += " AND cr.reference_type = ?";
-      params.push(refType);
-    }
-
-    query += " ORDER BY cr.reference_type, cr.created_at DESC";
-
-    const references = db
-      .query<{
-        id: number;
-        source_card_id: number;
-        target_card_id: number;
-        reference_type: string;
-        created_at: string;
-        source_title: string;
-        target_title: string;
-      }, (number | string)[]>(query)
-      .all(...params);
-
-    return c.json(references);
-  });
+  interface CardWithRefs extends Card {
+    references: {
+      outgoing: (CardReference & { target_title: string })[];
+      incoming: (CardReference & { source_title: string })[];
+    };
+  }
 
   // GET /cards - List cards with optional filters and FTS search
   v1.get("/cards", (c) => {
@@ -261,7 +225,58 @@ export function createApp({ db, jwtSecret }: AppDependencies): Hono {
         .all(...params);
     }
 
-    return c.json(cards);
+    if (cards.length === 0) {
+      return c.json([]);
+    }
+
+    // Fetch all references for these cards in two queries (no N+1)
+    const cardIds = cards.map((c) => c.id);
+    const placeholders = cardIds.map(() => "?").join(",");
+
+    const outgoingRefs = db
+      .query<CardReference & { target_title: string }, number[]>(
+        `SELECT cr.*, c.title as target_title 
+         FROM card_references cr 
+         JOIN cards c ON cr.target_card_id = c.id 
+         WHERE cr.source_card_id IN (${placeholders})`
+      )
+      .all(...cardIds);
+
+    const incomingRefs = db
+      .query<CardReference & { source_title: string }, number[]>(
+        `SELECT cr.*, c.title as source_title 
+         FROM card_references cr 
+         JOIN cards c ON cr.source_card_id = c.id 
+         WHERE cr.target_card_id IN (${placeholders})`
+      )
+      .all(...cardIds);
+
+    // Group references by card ID
+    const outgoingByCard = new Map<number, (CardReference & { target_title: string })[]>();
+    const incomingByCard = new Map<number, (CardReference & { source_title: string })[]>();
+
+    for (const ref of outgoingRefs) {
+      const list = outgoingByCard.get(ref.source_card_id) || [];
+      list.push(ref);
+      outgoingByCard.set(ref.source_card_id, list);
+    }
+
+    for (const ref of incomingRefs) {
+      const list = incomingByCard.get(ref.target_card_id) || [];
+      list.push(ref);
+      incomingByCard.set(ref.target_card_id, list);
+    }
+
+    // Attach references to cards
+    const cardsWithRefs: CardWithRefs[] = cards.map((card) => ({
+      ...card,
+      references: {
+        outgoing: outgoingByCard.get(card.id) || [],
+        incoming: incomingByCard.get(card.id) || [],
+      },
+    }));
+
+    return c.json(cardsWithRefs);
   });
 
   // POST /cards - Create a new card
@@ -542,51 +557,6 @@ export function createApp({ db, jwtSecret }: AppDependencies): Hono {
     "clones",
     "cloned_by",
   ];
-
-  interface CardReference {
-    id: number;
-    source_card_id: number;
-    target_card_id: number;
-    reference_type: string;
-    created_at: string;
-  }
-
-  // GET /cards/:id/references - List references for a card
-  v1.get("/cards/:id/references", (c) => {
-    const cardId = parseInt(c.req.param("id"), 10);
-
-    const card = db
-      .query<{ id: number }, [number]>("SELECT id FROM cards WHERE id = ?")
-      .get(cardId);
-
-    if (!card) {
-      return c.json({ error: "Card not found" }, 404);
-    }
-
-    // Get references where this card is the source
-    const outgoing = db
-      .query<CardReference & { target_title: string }, [number]>(
-        `SELECT cr.*, c.title as target_title 
-         FROM card_references cr 
-         JOIN cards c ON cr.target_card_id = c.id 
-         WHERE cr.source_card_id = ? 
-         ORDER BY cr.created_at DESC`
-      )
-      .all(cardId);
-
-    // Get references where this card is the target
-    const incoming = db
-      .query<CardReference & { source_title: string }, [number]>(
-        `SELECT cr.*, c.title as source_title 
-         FROM card_references cr 
-         JOIN cards c ON cr.source_card_id = c.id 
-         WHERE cr.target_card_id = ? 
-         ORDER BY cr.created_at DESC`
-      )
-      .all(cardId);
-
-    return c.json({ outgoing, incoming });
-  });
 
   // POST /cards/:id/references - Add a reference
   v1.post("/cards/:id/references", async (c) => {

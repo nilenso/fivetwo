@@ -9,7 +9,7 @@ const DEFAULT_CONFIG = "fivetwo.config.json";
 function getConfigPath(): string {
   const configIndex = Bun.argv.indexOf("--config");
   if (configIndex !== -1 && Bun.argv[configIndex + 1]) {
-    return Bun.argv[configIndex + 1];
+    return Bun.argv[configIndex + 1]!;
   }
   return DEFAULT_CONFIG;
 }

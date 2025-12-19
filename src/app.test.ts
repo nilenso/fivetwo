@@ -1013,25 +1013,29 @@ describe("/api/v1/cards/:id/references", () => {
   });
 
   test("lists references for a card", async () => {
-    const res = await app.request(`/api/v1/cards/${card1Id}/references`, {
+    // References are now returned with the card via GET /cards
+    const res = await app.request(`/api/v1/cards?id=${card1Id}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
 
     expect(res.status).toBe(200);
-    const data = await res.json();
-    expect(data.outgoing).toBeDefined();
-    expect(data.incoming).toBeDefined();
-    expect(data.outgoing.length).toBeGreaterThanOrEqual(1);
-    expect(data.outgoing[0].target_title).toBe("Card 2");
+    const cards = await res.json();
+    expect(cards.length).toBe(1);
+    const card = cards[0];
+    expect(card.references).toBeDefined();
+    expect(card.references.outgoing).toBeDefined();
+    expect(card.references.incoming).toBeDefined();
+    expect(card.references.outgoing.length).toBeGreaterThanOrEqual(1);
+    expect(card.references.outgoing[0].target_title).toBe("Card 2");
   });
 
   test("deletes a reference", async () => {
-    // Get reference ID
-    const listRes = await app.request(`/api/v1/cards/${card1Id}/references`, {
+    // Get reference ID from card
+    const listRes = await app.request(`/api/v1/cards?id=${card1Id}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
-    const { outgoing } = await listRes.json();
-    const refId = outgoing[0].id;
+    const cards = await listRes.json();
+    const refId = cards[0].references.outgoing[0].id;
 
     const res = await app.request(`/api/v1/cards/${card1Id}/references/${refId}`, {
       method: "DELETE",
