@@ -35,9 +35,8 @@ interface Comment {
 
 interface Project {
   id: number;
-  host: string;
-  owner: string;
-  repository: string;
+  name: string;
+  repository_url: string;
   created_at: string;
 }
 
@@ -83,9 +82,7 @@ export function createApp({ db, jwtSecret }: AppDependencies): Hono {
   // GET /projects - List projects with optional filters
   v1.get("/projects", (c) => {
     const id = c.req.query("id");
-    const host = c.req.query("host");
-    const owner = c.req.query("owner");
-    const repository = c.req.query("repository");
+    const name = c.req.query("name");
 
     const conditions: string[] = [];
     const params: (string | number)[] = [];
@@ -94,17 +91,9 @@ export function createApp({ db, jwtSecret }: AppDependencies): Hono {
       conditions.push("id = ?");
       params.push(parseInt(id, 10));
     }
-    if (host) {
-      conditions.push("host = ?");
-      params.push(host);
-    }
-    if (owner) {
-      conditions.push("owner = ?");
-      params.push(owner);
-    }
-    if (repository) {
-      conditions.push("repository = ?");
-      params.push(repository);
+    if (name) {
+      conditions.push("name LIKE ?");
+      params.push(`%${name}%`);
     }
 
     const whereClause =
@@ -122,23 +111,33 @@ export function createApp({ db, jwtSecret }: AppDependencies): Hono {
   // POST /projects - Create a new project
   v1.post("/projects", async (c) => {
     const body = await c.req.json<{
-      host: string;
-      owner: string;
-      repository: string;
+      repository_url: string;
+      name?: string;
     }>();
 
-    if (!body.host || !body.owner || !body.repository) {
-      return c.json({ error: "host, owner, and repository are required" }, 400);
+    if (!body.repository_url) {
+      return c.json({ error: "repository_url is required" }, 400);
+    }
+
+    // Auto-generate name from last 2 parts of URL path
+    let name = body.name;
+    if (!name) {
+      const parts = body.repository_url.replace(/\.git$/, "").split("/").filter(Boolean);
+      if (parts.length >= 2) {
+        name = `${parts[parts.length - 2]}/${parts[parts.length - 1]}`;
+      } else {
+        name = parts[parts.length - 1] || body.repository_url;
+      }
     }
 
     try {
       const result = db
-        .query<{ id: number }, [string, string, string]>(
-          `INSERT INTO projects (host, owner, repository)
-           VALUES (?, ?, ?)
+        .query<{ id: number }, [string, string]>(
+          `INSERT INTO projects (name, repository_url)
+           VALUES (?, ?)
            RETURNING id`
         )
-        .get(body.host, body.owner, body.repository);
+        .get(name, body.repository_url);
 
       const project = db
         .query<Project, [number]>("SELECT * FROM projects WHERE id = ?")

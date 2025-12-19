@@ -13,11 +13,10 @@ function createTestDb(): Database {
   db.run(`
     CREATE TABLE projects (
       id INTEGER PRIMARY KEY,
-      host TEXT NOT NULL,
-      owner TEXT NOT NULL,
-      repository TEXT NOT NULL,
+      name TEXT NOT NULL,
+      repository_url TEXT NOT NULL,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      UNIQUE(host, owner, repository)
+      UNIQUE(repository_url)
     )
   `);
 
@@ -314,18 +313,15 @@ describe("POST /api/v1/projects", () => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        host: "github.com",
-        owner: "testowner",
-        repository: "testrepo",
+        repository_url: "https://github.com/testowner/testrepo",
       }),
     });
 
     expect(res.status).toBe(201);
     const project = await res.json();
     expect(project.id).toBeDefined();
-    expect(project.host).toBe("github.com");
-    expect(project.owner).toBe("testowner");
-    expect(project.repository).toBe("testrepo");
+    expect(project.name).toBe("testowner/testrepo");
+    expect(project.repository_url).toBe("https://github.com/testowner/testrepo");
     expect(project.created_at).toBeDefined();
   });
 
@@ -336,11 +332,7 @@ describe("POST /api/v1/projects", () => {
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        host: "github.com",
-        owner: "testowner",
-        // missing repository
-      }),
+      body: JSON.stringify({}),
     });
 
     expect(res.status).toBe(400);
@@ -357,9 +349,7 @@ describe("POST /api/v1/projects", () => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        host: "github.com",
-        owner: "duplicate",
-        repository: "repo",
+        repository_url: "https://github.com/duplicate/repo",
       }),
     });
 
@@ -371,9 +361,7 @@ describe("POST /api/v1/projects", () => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        host: "github.com",
-        owner: "duplicate",
-        repository: "repo",
+        repository_url: "https://github.com/duplicate/repo",
       }),
     });
 
@@ -394,8 +382,8 @@ describe("/api/v1/cards", () => {
 
     // Create test user and project
     db.run("INSERT INTO users (id, username, type) VALUES (?, ?, ?)", [1, "testuser", "human"]);
-    db.run("INSERT INTO projects (id, host, owner, repository) VALUES (?, ?, ?, ?)", [
-      1, "github.com", "test", "repo"
+    db.run("INSERT INTO projects (id, name, repository_url) VALUES (?, ?, ?)", [
+      1, "test/repo", "https://github.com/test/repo"
     ]);
 
     token = await generateJwt(JWT_SECRET, 1);
@@ -767,8 +755,8 @@ describe("/api/v1/cards/:id/comments", () => {
     app = createApp({ db, jwtSecret: JWT_SECRET });
 
     db.run("INSERT INTO users (id, username, type) VALUES (?, ?, ?)", [1, "testuser", "human"]);
-    db.run("INSERT INTO projects (id, host, owner, repository) VALUES (?, ?, ?, ?)", [
-      1, "github.com", "test", "repo"
+    db.run("INSERT INTO projects (id, name, repository_url) VALUES (?, ?, ?)", [
+      1, "test/repo", "https://github.com/test/repo"
     ]);
 
     const result = db
@@ -842,8 +830,8 @@ describe("/api/v1/comments/:id", () => {
     app = createApp({ db, jwtSecret: JWT_SECRET });
 
     db.run("INSERT INTO users (id, username, type) VALUES (?, ?, ?)", [1, "testuser", "human"]);
-    db.run("INSERT INTO projects (id, host, owner, repository) VALUES (?, ?, ?, ?)", [
-      1, "github.com", "test", "repo"
+    db.run("INSERT INTO projects (id, name, repository_url) VALUES (?, ?, ?)", [
+      1, "test/repo", "https://github.com/test/repo"
     ]);
     db.run("INSERT INTO cards (id, project_id, title, created_by) VALUES (?, ?, ?, ?)", [
       1, 1, "Card for comments", 1
@@ -913,8 +901,8 @@ describe("/api/v1/cards/:id/references", () => {
     app = createApp({ db, jwtSecret: JWT_SECRET });
 
     db.run("INSERT INTO users (id, username, type) VALUES (?, ?, ?)", [1, "testuser", "human"]);
-    db.run("INSERT INTO projects (id, host, owner, repository) VALUES (?, ?, ?, ?)", [
-      1, "github.com", "test", "repo"
+    db.run("INSERT INTO projects (id, name, repository_url) VALUES (?, ?, ?)", [
+      1, "test/repo", "https://github.com/test/repo"
     ]);
 
     const result1 = db

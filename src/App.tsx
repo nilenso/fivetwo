@@ -3,9 +3,8 @@ import Markdown from "react-markdown";
 
 interface Project {
   id: number;
-  host: string;
-  owner: string;
-  repository: string;
+  name: string;
+  repository_url: string;
   created_at: string;
 }
 
@@ -89,9 +88,7 @@ function NewProjectForm({
   onSuccess: (project: Project) => void;
   onCancel: () => void;
 }) {
-  const [host, setHost] = useState("github.com");
-  const [owner, setOwner] = useState("");
-  const [repository, setRepository] = useState("");
+  const [repositoryUrl, setRepositoryUrl] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -107,7 +104,7 @@ function NewProjectForm({
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ host, owner, repository }),
+        body: JSON.stringify({ repository_url: repositoryUrl }),
       });
 
       if (!res.ok) {
@@ -138,36 +135,14 @@ function NewProjectForm({
         </header>
         <form onSubmit={handleSubmit}>
           <label>
-            Host
+            Repository URL
             <input
-              type="text"
-              value={host}
-              onChange={(e) => setHost(e.target.value)}
-              placeholder="github.com"
-              required
-              disabled={submitting}
-            />
-          </label>
-          <label>
-            Owner
-            <input
-              type="text"
-              value={owner}
-              onChange={(e) => setOwner(e.target.value)}
-              placeholder="username or organization"
+              type="url"
+              value={repositoryUrl}
+              onChange={(e) => setRepositoryUrl(e.target.value)}
+              placeholder="https://github.com/owner/repository"
               required
               autoFocus
-              disabled={submitting}
-            />
-          </label>
-          <label>
-            Repository
-            <input
-              type="text"
-              value={repository}
-              onChange={(e) => setRepository(e.target.value)}
-              placeholder="repository-name"
-              required
               disabled={submitting}
             />
           </label>
@@ -358,6 +333,7 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [showNewProjectForm, setShowNewProjectForm] = useState(false);
   const [selectedCard, setSelectedCard] = useState<Card | null>(null);
+  const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
 
   const fetchData = async (authToken: string) => {
     setLoading(true);
@@ -397,6 +373,13 @@ export function App() {
       fetchData(token);
     }
   }, [token]);
+
+  // Auto-select first project if none selected
+  useEffect(() => {
+    if (projects.length > 0 && selectedProjectId === null) {
+      setSelectedProjectId(projects[0]!.id);
+    }
+  }, [projects, selectedProjectId]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -455,27 +438,50 @@ export function App() {
     );
   }
 
-  // Group cards by project_id
-  const cardsByProject = cards.reduce((acc, card) => {
-    const projectId = card.project_id;
-    if (!acc[projectId]) {
-      acc[projectId] = [];
-    }
-    acc[projectId]!.push(card);
-    return acc;
-  }, {} as Record<number, Card[]>);
-
   const handleProjectCreated = (project: Project) => {
     setProjects((prev) => [project, ...prev]);
     setShowNewProjectForm(false);
+    setSelectedProjectId(project.id);
   };
+
+  const selectedProject = projects.find((p) => p.id === selectedProjectId);
+  const projectCards = selectedProjectId ? cards.filter((c) => c.project_id === selectedProjectId) : [];
+  const activeCards = projectCards.filter(
+    (c) => !TERMINAL_STATUSES.includes(c.status as typeof TERMINAL_STATUSES[number])
+  );
+  const terminatedCards = projectCards.filter(
+    (c) => TERMINAL_STATUSES.includes(c.status as typeof TERMINAL_STATUSES[number])
+  );
 
   return (
     <main className="container">
       <header>
         <h1>FiveTwo</h1>
-        <div>
-          <button onClick={() => setShowNewProjectForm(true)} style={{ marginRight: "0.5rem" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          <select
+            value={selectedProjectId ?? ""}
+            onChange={(e) => setSelectedProjectId(e.target.value ? Number(e.target.value) : null)}
+            style={{ minWidth: "200px" }}
+          >
+            <option value="" disabled>Select a project</option>
+            {projects.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+          {selectedProject && (
+            <a
+              href={selectedProject.repository_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Open repository"
+              style={{ textDecoration: "none" }}
+            >
+              ↗
+            </a>
+          )}
+          <button onClick={() => setShowNewProjectForm(true)}>
             Add Project
           </button>
           <button onClick={handleLogout} className="outline">Logout</button>
@@ -492,56 +498,32 @@ export function App() {
 
       {projects.length === 0 ? (
         <p>No projects yet.</p>
+      ) : !selectedProject ? (
+        <p>Select a project to view cards.</p>
       ) : (
-        projects.map((project) => {
-          const projectCards = cardsByProject[project.id] || [];
-          const activeCards = projectCards.filter(
-            (c) => !TERMINAL_STATUSES.includes(c.status as typeof TERMINAL_STATUSES[number])
-          );
-          const terminatedCards = projectCards.filter(
-            (c) => TERMINAL_STATUSES.includes(c.status as typeof TERMINAL_STATUSES[number])
-          );
-          return (
-            <section key={project.id}>
-              <h2>
-                <img
-                  src={`https://${project.host}/favicon.ico`}
-                  alt=""
-                  style={{ width: 20, height: 20, marginRight: 8, verticalAlign: "middle" }}
-                  onError={(e) => { e.currentTarget.style.display = "none"; }}
-                />
-                <a
-                  href={`https://${project.host}/${project.owner}/${project.repository}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  {project.owner}/{project.repository}
-                </a>
-              </h2>
-              {activeCards.length === 0 ? (
-                <p>No active cards in this project.</p>
-              ) : (
-                <div className="card-grid">
-                  {activeCards.map((c) => (
-                    <CardTile key={c.id} card={c} onClick={() => setSelectedCard(c)} />
-                  ))}
-                </div>
-              )}
-              {terminatedCards.length > 0 && (
-                <details>
-                  <summary>
-                    Completed ({terminatedCards.length} card{terminatedCards.length !== 1 ? "s" : ""})
-                  </summary>
-                  <div className="card-grid">
-                    {terminatedCards.map((c) => (
-                      <CardTile key={c.id} card={c} onClick={() => setSelectedCard(c)} />
-                    ))}
-                  </div>
-                </details>
-              )}
-            </section>
-          );
-        })
+        <section>
+          {activeCards.length === 0 ? (
+            <p>No active cards in this project.</p>
+          ) : (
+            <div className="card-grid">
+              {activeCards.map((c) => (
+                <CardTile key={c.id} card={c} onClick={() => setSelectedCard(c)} />
+              ))}
+            </div>
+          )}
+          {terminatedCards.length > 0 && (
+            <details>
+              <summary>
+                Completed ({terminatedCards.length} card{terminatedCards.length !== 1 ? "s" : ""})
+              </summary>
+              <div className="card-grid">
+                {terminatedCards.map((c) => (
+                  <CardTile key={c.id} card={c} onClick={() => setSelectedCard(c)} />
+                ))}
+              </div>
+            </details>
+          )}
+        </section>
       )}
 
       <SidePanel
