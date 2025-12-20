@@ -83,6 +83,44 @@ Production:
 bun start
 ```
 
+## Terminal UI (TUI)
+
+fivetwo includes an htop-style terminal interface for browsing and managing cards.
+
+**Note:** The TUI requires a real interactive terminal (TTY) to run. It won't work in non-interactive environments like CI pipelines or editor terminals without proper TTY support.
+
+### Running the TUI
+
+```bash
+FIVETWO_TOKEN=$(cat neenaauth.token) bun run tui
+```
+
+Or set the environment variable:
+
+```bash
+export FIVETWO_TOKEN=$(bun run auth <username>)
+bun run tui
+```
+
+### Keyboard Shortcuts
+
+| Key       | Action                          |
+|-----------|---------------------------------|
+| `↑`/`↓`   | Navigate cards                  |
+| `←`/`→`   | Switch between projects         |
+| `/`       | Search/filter cards             |
+| `p`       | Open project picker             |
+| `Enter`   | View card details               |
+| `Escape`  | Close search/picker             |
+| `q`       | Quit                            |
+
+### Environment Variables
+
+| Variable        | Description                              | Default                 |
+|-----------------|------------------------------------------|-------------------------|
+| `FIVETWO_URL`   | API base URL                             | `http://localhost:3000` |
+| `FIVETWO_TOKEN` | JWT authentication token (required)      | -                       |
+
 ## Authentication
 
 All `/api/*` routes require JWT authentication. Tokens expire after 1 week.
