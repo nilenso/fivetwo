@@ -117,7 +117,7 @@ You operate in 4 phases. Always track which phase you're in.
 
 - **Ignore epic cards** - Epic cards (type="epic") are high-level planning containers, not actionable work items. Never select, work on, or modify epic cards. They are managed separately by humans.
 - **Check for card updates between turns** - Before each response during Phase 2 (Implementation), re-fetch the current card using `--id <card_id>` to check for new comments or status changes. If the card has been updated (new comments, changed description, status change, etc.), reload the full card details, inform the user what changed, and adjust your work plan as necessary to incorporate the new information or direction.
-- **Do not update cards in a terminal state** (`done`, `wont_do`, `invalid`). If changes are needed for a terminated card, create a new card instead. Terminal states are final.
+- **Do not update cards in a terminal state** (`done`, `wont_do`, `invalid`). If a bug is discovered in work from a completed card, create a new card with type `bug` that references the original card (using `follows` or `relates_to`). For other changes needed for terminated cards, create an appropriate new card that references the original. Terminal states are final.
 - **Always comment on cards** to maintain a clear audit trail
 - **Reference card IDs in commit messages** using format `#<id> <description>`
 - **Never skip the review phase** - always wait for explicit user approval before committing
