@@ -89,8 +89,17 @@ function NewProjectForm({
   onCancel: () => void;
 }) {
   const [repositoryUrl, setRepositoryUrl] = useState("");
+  const [name, setName] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const handleUrlChange = (url: string) => {
+    setRepositoryUrl(url);
+    const parts = url.replace(/\.git$/, "").split("/").filter(Boolean);
+    if (parts.length >= 2) {
+      setName(`${parts[parts.length - 2]}/${parts[parts.length - 1]}`);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -104,7 +113,7 @@ function NewProjectForm({
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ repository_url: repositoryUrl }),
+        body: JSON.stringify({ repository_url: repositoryUrl, name }),
       });
 
       if (!res.ok) {
@@ -139,10 +148,21 @@ function NewProjectForm({
             <input
               type="url"
               value={repositoryUrl}
-              onChange={(e) => setRepositoryUrl(e.target.value)}
+              onChange={(e) => handleUrlChange(e.target.value)}
               placeholder="https://github.com/owner/repository"
               required
               autoFocus
+              disabled={submitting}
+            />
+          </label>
+          <label>
+            Name
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="owner/repository"
+              required
               disabled={submitting}
             />
           </label>
@@ -200,6 +220,20 @@ const REFERENCE_TYPE_LABELS: Record<string, string> = {
   precedes: "Precedes",
   clones: "Clones",
   cloned_by: "Cloned by",
+};
+
+const INVERSE_REFERENCE_TYPE: Record<string, string> = {
+  blocks: "blocked_by",
+  blocked_by: "blocks",
+  relates_to: "relates_to",
+  duplicates: "duplicated_by",
+  duplicated_by: "duplicates",
+  parent_of: "child_of",
+  child_of: "parent_of",
+  follows: "precedes",
+  precedes: "follows",
+  clones: "cloned_by",
+  cloned_by: "clones",
 };
 
 function SidePanel({
@@ -274,29 +308,31 @@ function SidePanel({
                 {loadingRefs ? (
                   <p aria-busy="true">Loading references...</p>
                 ) : (
-                  <>
-                    {references.outgoing.length > 0 && (
-                      <div style={{ marginBottom: "0.75rem" }}>
-                        {references.outgoing.map((ref) => (
-                          <div key={ref.id} className="reference-item">
-                            <span className="reference-type">{REFERENCE_TYPE_LABELS[ref.reference_type] || ref.reference_type}</span>
-                            <span className="reference-card">#{ref.target_card_id} {ref.target_title}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    {references.incoming.length > 0 && (
-                      <div>
-                        <small style={{ color: "var(--muted-color)" }}>Referenced by:</small>
-                        {references.incoming.map((ref) => (
-                          <div key={ref.id} className="reference-item">
-                            <span className="reference-type">{REFERENCE_TYPE_LABELS[ref.reference_type] || ref.reference_type}</span>
-                            <span className="reference-card">#{ref.source_card_id} {ref.source_title}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Relationship</th>
+                        <th>Card</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {references.outgoing.map((ref) => (
+                        <tr key={ref.id}>
+                          <td>{REFERENCE_TYPE_LABELS[ref.reference_type] || ref.reference_type}</td>
+                          <td>#{ref.target_card_id} {ref.target_title}</td>
+                        </tr>
+                      ))}
+                      {references.incoming.map((ref) => {
+                        const inverseType = INVERSE_REFERENCE_TYPE[ref.reference_type] || ref.reference_type;
+                        return (
+                          <tr key={ref.id}>
+                            <td>{REFERENCE_TYPE_LABELS[inverseType] || inverseType}</td>
+                            <td>#{ref.source_card_id} {ref.source_title}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 )}
               </div>
             )}
@@ -324,6 +360,69 @@ function SidePanel({
   );
 }
 
+type ViewMode = "card" | "table";
+
+function CardTableRow({ card, onClick }: { card: Card; onClick: () => void }) {
+  const typeIcon = CARD_TYPE_ICONS[card.type] || "✅";
+  return (
+    <tr className="card-table-row" onClick={onClick}>
+      <td className="card-table-id">#{card.id}</td>
+      <td className="card-table-type" title={card.type}>{typeIcon}</td>
+      <td className="card-table-title">{card.title}</td>
+      <td className="card-table-priority"><PriorityDisplay priority={card.priority} /></td>
+      <td className="card-table-status">
+        <span className="card-tile-status" data-status={card.status}>
+          {card.status.replace("_", " ")}
+        </span>
+      </td>
+    </tr>
+  );
+}
+
+function CardTable({ cards, onCardClick }: { cards: Card[]; onCardClick: (card: Card) => void }) {
+  return (
+    <table className="card-table">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Type</th>
+          <th>Title</th>
+          <th>Priority</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {cards.map((card) => (
+          <CardTableRow key={card.id} card={card} onClick={() => onCardClick(card)} />
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+function ViewToggle({ viewMode, onChange }: { viewMode: ViewMode; onChange: (mode: ViewMode) => void }) {
+  return (
+    <div className="view-toggle" role="group">
+      <button
+        className={viewMode === "card" ? "active" : ""}
+        onClick={() => onChange("card")}
+        title="Card view"
+        aria-pressed={viewMode === "card"}
+      >
+        ▦
+      </button>
+      <button
+        className={viewMode === "table" ? "active" : ""}
+        onClick={() => onChange("table")}
+        title="Table view"
+        aria-pressed={viewMode === "table"}
+      >
+        ☰
+      </button>
+    </div>
+  );
+}
+
 export function App() {
   const [token, setTokenState] = useState<string | null>(getToken);
   const [tokenInput, setTokenInput] = useState("");
@@ -333,7 +432,14 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [showNewProjectForm, setShowNewProjectForm] = useState(false);
   const [selectedCard, setSelectedCard] = useState<Card | null>(null);
-  const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
+  const [selectedProjectId, setSelectedProjectId] = useState<number | null>(() => {
+    const saved = localStorage.getItem("selectedProjectId");
+    return saved ? parseInt(saved, 10) : null;
+  });
+  const [viewMode, setViewMode] = useState<ViewMode>(() => {
+    const saved = sessionStorage.getItem("viewMode");
+    return (saved === "card" || saved === "table") ? saved : "card";
+  });
 
   const fetchData = async (authToken: string) => {
     setLoading(true);
@@ -374,12 +480,27 @@ export function App() {
     }
   }, [token]);
 
-  // Auto-select first project if none selected
+  // Auto-select first project if none selected, or validate saved selection
   useEffect(() => {
-    if (projects.length > 0 && selectedProjectId === null) {
-      setSelectedProjectId(projects[0]!.id);
+    if (projects.length > 0) {
+      const savedExists = selectedProjectId !== null && projects.some(p => p.id === selectedProjectId);
+      if (!savedExists) {
+        setSelectedProjectId(projects[0]!.id);
+      }
     }
-  }, [projects, selectedProjectId]);
+  }, [projects]);
+
+  // Persist selected project to localStorage
+  useEffect(() => {
+    if (selectedProjectId !== null) {
+      localStorage.setItem("selectedProjectId", String(selectedProjectId));
+    }
+  }, [selectedProjectId]);
+
+  // Persist view mode to sessionStorage
+  useEffect(() => {
+    sessionStorage.setItem("viewMode", viewMode);
+  }, [viewMode]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -502,25 +623,34 @@ export function App() {
         <p>Select a project to view cards.</p>
       ) : (
         <section>
+          <div className="section-header">
+            <ViewToggle viewMode={viewMode} onChange={setViewMode} />
+          </div>
           {activeCards.length === 0 ? (
             <p>No active cards in this project.</p>
-          ) : (
+          ) : viewMode === "card" ? (
             <div className="card-grid">
               {activeCards.map((c) => (
                 <CardTile key={c.id} card={c} onClick={() => setSelectedCard(c)} />
               ))}
             </div>
+          ) : (
+            <CardTable cards={activeCards} onCardClick={setSelectedCard} />
           )}
           {terminatedCards.length > 0 && (
             <details>
               <summary>
                 Completed ({terminatedCards.length} card{terminatedCards.length !== 1 ? "s" : ""})
               </summary>
-              <div className="card-grid">
-                {terminatedCards.map((c) => (
-                  <CardTile key={c.id} card={c} onClick={() => setSelectedCard(c)} />
-                ))}
-              </div>
+              {viewMode === "card" ? (
+                <div className="card-grid">
+                  {terminatedCards.map((c) => (
+                    <CardTile key={c.id} card={c} onClick={() => setSelectedCard(c)} />
+                  ))}
+                </div>
+              ) : (
+                <CardTable cards={terminatedCards} onCardClick={setSelectedCard} />
+              )}
             </details>
           )}
         </section>
