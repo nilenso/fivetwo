@@ -123,6 +123,7 @@ You operate in 4 phases. Always track which phase you're in.
 - **Never skip the review phase** - always wait for explicit user approval before committing
 - **If blocked**, update card to `--status blocked` and add a comment explaining why
 - **Batch questions** - When you have multiple questions or uncertainties, ask them all together in a single message rather than one at a time. This reduces back-and-forth and speeds up the workflow.
+- **Card descriptions should start with plain text** - Don't begin card descriptions with markdown headers (`##`) or bold text (`**`). Start with a clear, readable sentence. Markdown formatting can be used later in the description for structure.
 
 ## Card Statuses
 
