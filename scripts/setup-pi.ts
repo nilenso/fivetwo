@@ -5,7 +5,7 @@
  * - Skills to ~/.pi/agent/skills/
  */
 
-import { mkdir, symlink, readdir, stat } from "node:fs/promises";
+import { mkdir, symlink, readdir, stat, unlink, lstat, readlink } from "node:fs/promises";
 import { join, dirname } from "node:path";
 import { homedir } from "node:os";
 
@@ -41,9 +41,40 @@ async function linkFile(source: string, target: string): Promise<void> {
   }
 }
 
+async function cleanStaleLinks(dir: string, sourceDir: string): Promise<void> {
+  try {
+    const entries = await readdir(dir);
+    for (const entry of entries) {
+      const target = join(dir, entry);
+      try {
+        const linkStat = await lstat(target);
+        if (linkStat.isSymbolicLink()) {
+          const linkTarget = await readlink(target);
+          // Check if link points to our source directory
+          if (linkTarget.startsWith(sourceDir)) {
+            // Check if the source still exists
+            const sourceExists = await Bun.file(linkTarget).exists();
+            if (!sourceExists) {
+              await unlink(target);
+              console.log(`  ✓ Removed stale link: ${entry}`);
+            }
+          }
+        }
+      } catch {
+        // Ignore errors for individual entries
+      }
+    }
+  } catch {
+    // Directory might not exist yet
+  }
+}
+
 async function linkCommands(): Promise<void> {
   console.log("\nLinking commands to", GLOBAL_COMMANDS_DIR);
   await ensureDir(GLOBAL_COMMANDS_DIR);
+
+  // Clean up stale links first
+  await cleanStaleLinks(GLOBAL_COMMANDS_DIR, PI_COMMANDS_DIR);
 
   const files = await readdir(PI_COMMANDS_DIR);
   for (const file of files) {
@@ -79,6 +110,9 @@ async function linkSkills(): Promise<void> {
   console.log("\nLinking skills to", GLOBAL_SKILLS_DIR);
   await ensureDir(GLOBAL_SKILLS_DIR);
 
+  // Clean up stale links first
+  await cleanStaleLinks(GLOBAL_SKILLS_DIR, PI_SKILLS_DIR);
+
   const skillDirs = await findSkills(PI_SKILLS_DIR);
   for (const skillDir of skillDirs) {
     // Use the skill directory name as the link name
@@ -99,7 +133,8 @@ async function main(): Promise<void> {
   console.log("\nTo use fivetwo with pi-agent:");
   console.log("  1. Set FIVETWO_URL (default: http://localhost:3000)");
   console.log("  2. Set FIVETWO_TOKEN (generate with: bun run auth <username>)");
-  console.log("  3. Use the /52 command to start working on cards");
+  console.log("  3. Use /52loop to start the card work loop");
+  console.log("  4. Use /52new <title> to create a new card");
 }
 
 main().catch((err) => {
