@@ -34,6 +34,7 @@ function createTestDb(): Database {
     CREATE TABLE cards (
       id INTEGER PRIMARY KEY,
       project_id INTEGER NOT NULL REFERENCES projects(id),
+      card_number INTEGER NOT NULL,
       title TEXT NOT NULL,
       description TEXT,
       status TEXT NOT NULL DEFAULT 'backlog' CHECK(status IN ('backlog', 'in_progress', 'review', 'blocked', 'done', 'wont_do', 'invalid')),
@@ -42,7 +43,8 @@ function createTestDb(): Database {
       created_by INTEGER NOT NULL REFERENCES users(id),
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      version INTEGER NOT NULL DEFAULT 1
+      version INTEGER NOT NULL DEFAULT 1,
+      UNIQUE(project_id, card_number)
     )
   `);
 
@@ -491,22 +493,99 @@ describe("/api/v1/cards", () => {
 
       expect(res.status).toBe(400);
     });
+
+    test("assigns sequential card_number per project", async () => {
+      // Create a second project (use id 3 to avoid conflicts with other tests)
+      db.run("INSERT INTO projects (id, name, repository_url) VALUES (?, ?, ?)", [
+        3, "seq/project", "https://github.com/seq/project"
+      ]);
+
+      // Create cards in the new project
+      const res1 = await app.request("/api/v1/cards", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ project_id: 3, title: "Project 3 Card A" }),
+      });
+      const card1 = await res1.json();
+
+      const res2 = await app.request("/api/v1/cards", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ project_id: 3, title: "Project 3 Card B" }),
+      });
+      const card2 = await res2.json();
+
+      const res3 = await app.request("/api/v1/cards", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ project_id: 3, title: "Project 3 Card C" }),
+      });
+      const card3 = await res3.json();
+
+      // Cards should have sequential numbers starting from 1
+      expect(card1.card_number).toBe(1);
+      expect(card2.card_number).toBe(2);
+      expect(card3.card_number).toBe(3);
+
+      // Create another project to verify independent numbering
+      db.run("INSERT INTO projects (id, name, repository_url) VALUES (?, ?, ?)", [
+        4, "other/project", "https://github.com/other/project"
+      ]);
+
+      const res4 = await app.request("/api/v1/cards", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ project_id: 4, title: "Project 4 Card A" }),
+      });
+      const card4 = await res4.json();
+
+      // New project starts fresh at 1
+      expect(card4.card_number).toBe(1);
+    });
+
+    test("includes card_number in response", async () => {
+      const res = await app.request("/api/v1/cards", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ project_id: 1, title: "Card with number" }),
+      });
+
+      expect(res.status).toBe(201);
+      const card = await res.json();
+      expect(card.card_number).toBeDefined();
+      expect(typeof card.card_number).toBe("number");
+    });
   });
 
   describe("GET /cards", () => {
     beforeAll(() => {
       // Insert test cards
       db.run(
-        "INSERT INTO cards (id, project_id, title, description, status, priority, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        [10, 1, "High Priority Bug", "Fix this bug", "in_progress", 90, 1]
+        "INSERT INTO cards (id, project_id, card_number, title, description, status, priority, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        [10, 1, 10, "High Priority Bug", "Fix this bug", "in_progress", 90, 1]
       );
       db.run(
-        "INSERT INTO cards (id, project_id, title, description, status, priority, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        [11, 1, "Low Priority Feature", "Add feature", "backlog", 20, 1]
+        "INSERT INTO cards (id, project_id, card_number, title, description, status, priority, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        [11, 1, 11, "Low Priority Feature", "Add feature", "backlog", 20, 1]
       );
       db.run(
-        "INSERT INTO cards (id, project_id, title, description, status, priority, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        [12, 1, "Search Test Card", "Description for search", "done", 50, 1]
+        "INSERT INTO cards (id, project_id, card_number, title, description, status, priority, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        [12, 1, 12, "Search Test Card", "Description for search", "done", 50, 1]
       );
     });
 
@@ -569,7 +648,7 @@ describe("/api/v1/cards", () => {
     beforeAll(() => {
       const result = db
         .query<{ id: number }, []>(
-          "INSERT INTO cards (project_id, title, status, priority, created_by) VALUES (1, 'Update Test', 'backlog', 50, 1) RETURNING id"
+          "INSERT INTO cards (project_id, card_number, title, status, priority, created_by) VALUES (1, 100, 'Update Test', 'backlog', 50, 1) RETURNING id"
         )
         .get();
       cardId = result!.id;
@@ -761,7 +840,7 @@ describe("/api/v1/cards/:id/comments", () => {
 
     const result = db
       .query<{ id: number }, []>(
-        "INSERT INTO cards (project_id, title, created_by) VALUES (1, 'Comment Test Card', 1) RETURNING id"
+        "INSERT INTO cards (project_id, card_number, title, created_by) VALUES (1, 200, 'Comment Test Card', 1) RETURNING id"
       )
       .get();
     cardId = result!.id;
@@ -833,8 +912,8 @@ describe("/api/v1/comments/:id", () => {
     db.run("INSERT INTO projects (id, name, repository_url) VALUES (?, ?, ?)", [
       1, "test/repo", "https://github.com/test/repo"
     ]);
-    db.run("INSERT INTO cards (id, project_id, title, created_by) VALUES (?, ?, ?, ?)", [
-      1, 1, "Card for comments", 1
+    db.run("INSERT INTO cards (id, project_id, card_number, title, created_by) VALUES (?, ?, ?, ?, ?)", [
+      1, 1, 1, "Card for comments", 1
     ]);
 
     const result = db
@@ -907,14 +986,14 @@ describe("/api/v1/cards/:id/references", () => {
 
     const result1 = db
       .query<{ id: number }, []>(
-        "INSERT INTO cards (project_id, title, created_by) VALUES (1, 'Card 1', 1) RETURNING id"
+        "INSERT INTO cards (project_id, card_number, title, created_by) VALUES (1, 1, 'Card 1', 1) RETURNING id"
       )
       .get();
     card1Id = result1!.id;
 
     const result2 = db
       .query<{ id: number }, []>(
-        "INSERT INTO cards (project_id, title, created_by) VALUES (1, 'Card 2', 1) RETURNING id"
+        "INSERT INTO cards (project_id, card_number, title, created_by) VALUES (1, 2, 'Card 2', 1) RETURNING id"
       )
       .get();
     card2Id = result2!.id;

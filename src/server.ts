@@ -11,6 +11,7 @@ export interface AppDependencies {
 interface Card {
   id: number;
   project_id: number;
+  card_number: number;
   title: string;
   description: string | null;
   status: string;
@@ -327,14 +328,23 @@ export function createApp({ db, jwtSecret }: AppDependencies): Hono {
       return c.json({ error: `Invalid type. Must be one of: ${validCardTypes.join(", ")}` }, 400);
     }
 
+    // Calculate next card_number for this project
+    const maxCardNumber = db
+      .query<{ max_num: number | null }, [number]>(
+        "SELECT MAX(card_number) as max_num FROM cards WHERE project_id = ?"
+      )
+      .get(body.project_id);
+    const nextCardNumber = (maxCardNumber?.max_num ?? 0) + 1;
+
     const result = db
-      .query<{ id: number }, [number, string, string | null, string, number, string, number]>(
-        `INSERT INTO cards (project_id, title, description, status, priority, type, created_by)
-         VALUES (?, ?, ?, ?, ?, ?, ?)
+      .query<{ id: number }, [number, number, string, string | null, string, number, string, number]>(
+        `INSERT INTO cards (project_id, card_number, title, description, status, priority, type, created_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
          RETURNING id`
       )
       .get(
         body.project_id,
+        nextCardNumber,
         body.title,
         body.description ?? null,
         body.status ?? "backlog",
