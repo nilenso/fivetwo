@@ -567,6 +567,39 @@ export function createApp({ db, jwtSecret }: AppDependencies): Hono {
     "cloned_by",
   ];
 
+  // GET /cards/:id/references - Get all references for a card
+  v1.get("/cards/:id/references", (c) => {
+    const cardId = parseInt(c.req.param("id"), 10);
+
+    const card = db
+      .query<{ id: number }, [number]>("SELECT id FROM cards WHERE id = ?")
+      .get(cardId);
+
+    if (!card) {
+      return c.json({ error: "Card not found" }, 404);
+    }
+
+    const outgoing = db
+      .query<CardReference & { target_title: string }, [number]>(
+        `SELECT cr.*, c.title as target_title 
+         FROM card_references cr 
+         JOIN cards c ON c.id = cr.target_card_id 
+         WHERE cr.source_card_id = ?`
+      )
+      .all(cardId);
+
+    const incoming = db
+      .query<CardReference & { source_title: string }, [number]>(
+        `SELECT cr.*, c.title as source_title 
+         FROM card_references cr 
+         JOIN cards c ON c.id = cr.source_card_id 
+         WHERE cr.target_card_id = ?`
+      )
+      .all(cardId);
+
+    return c.json({ outgoing, incoming });
+  });
+
   // POST /cards/:id/references - Add a reference
   v1.post("/cards/:id/references", async (c) => {
     const sourceCardId = parseInt(c.req.param("id"), 10);

@@ -388,6 +388,27 @@ code {
   color: var(--muted-color, #888);
 }
 
+/* Side Panel Metadata Table */
+.side-panel-meta-table {
+  width: 100%;
+  margin-bottom: 1rem;
+  font-size: 0.85rem;
+}
+
+.side-panel-meta-table th {
+  text-align: left;
+  padding: 0.4rem 0.75rem 0.4rem 0;
+  font-weight: 500;
+  color: var(--pico-muted-color, #888);
+  width: 80px;
+  vertical-align: middle;
+}
+
+.side-panel-meta-table td {
+  padding: 0.4rem 0;
+  vertical-align: middle;
+}
+
 .side-panel-section {
   margin-top: 1.5rem;
 }

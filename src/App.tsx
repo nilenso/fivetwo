@@ -289,19 +289,38 @@ function SidePanel({
                 ×
               </button>
             </div>
-            <div className="side-panel-meta">
-              <span>#{card.id} • v{card.version}</span>
-              <span>{CARD_TYPE_ICONS[card.type] || "✅"} {card.type}</span>
-              <span>{card.status}</span>
-              <span><PriorityDisplay priority={card.priority} /></span>
-              <span>{new Date(card.created_at).toLocaleDateString()}</span>
-            </div>
-            {card.description && (
-              <div className="side-panel-section">
-                <h4>Description</h4>
-                <Markdown>{card.description}</Markdown>
-              </div>
-            )}
+            <table className="side-panel-meta-table">
+              <tbody>
+                <tr>
+                  <th>ID</th>
+                  <td>#{card.id}</td>
+                </tr>
+                <tr>
+                  <th>Version</th>
+                  <td>{card.version}</td>
+                </tr>
+                <tr>
+                  <th>Type</th>
+                  <td>{CARD_TYPE_ICONS[card.type] || "✅"} {card.type}</td>
+                </tr>
+                <tr>
+                  <th>Status</th>
+                  <td>
+                    <span className="card-tile-status" data-status={card.status}>
+                      {card.status.replace("_", " ")}
+                    </span>
+                  </td>
+                </tr>
+                <tr>
+                  <th>Priority</th>
+                  <td><PriorityDisplay priority={card.priority} /></td>
+                </tr>
+                <tr>
+                  <th>Created</th>
+                  <td>{new Date(card.created_at).toLocaleDateString()}</td>
+                </tr>
+              </tbody>
+            </table>
             {(references.outgoing.length > 0 || references.incoming.length > 0 || loadingRefs) && (
               <div className="side-panel-section">
                 <h4>References</h4>
@@ -334,6 +353,12 @@ function SidePanel({
                     </tbody>
                   </table>
                 )}
+              </div>
+            )}
+            {card.description && (
+              <div className="side-panel-section">
+                <h4>Description</h4>
+                <Markdown>{card.description}</Markdown>
               </div>
             )}
             <div className="side-panel-section">
